@@ -254,3 +254,31 @@ ST_Data <- fread(paste0(dir, '/data/ST_Data.csv'))
 
 # filter out the rows of ST_Data where CUSIP is '06054R6M9 or is.na
 ST_Data <- ST_Data %>% filter(CUSIP == '06054R6M9' | is.na(CUSIP))
+
+# pip the ST_Data to group by SettleDate and TenorBucket and summarise the calculated spread to term treasury and yield  by mean value weighted by Par value,
+# also summarize the number of rows as NumTransaction, pipe the summaries to a data.table and store the result in ST_Data_Agg
+ST_Data_Agg <- ST_Data %>% 
+    group_by(SettleDate, TenorBucket) %>% 
+    summarise(SpreadtoTermTreasury = weighted.mean(SpreadtoTermTreasury_calc, Par), 
+              Yield = weighted.mean(Yield_calc, Par), 
+              NumTransaction = n()) %>% 
+    data.table()
+
+# use dcast to transform LIBOR_Data from a long format with separate rows for each Date and Term pair
+# to a wide format with each Date has its own row and each unique Term becomes a column,
+# and the Value column contains the corresponding values
+LIBOR_Data_revise <- dcast(LIBOR_Data, Date ~ Term, value.var = 'Value')
+
+# set the first column name of LIBOR_Data_revise to SettleDate and add a 'x' to the front of the columne names of columns 2 to 7 
+# create a c() to do this in one statement and use the paste0 to do the string manipulation
+# this turn column names into SettleDate, x28, x60, x90, x180, x365, x398
+names(LIBOR_Data_revise) <- c('SettleDate', paste0('x', names(LIBOR_Data_revise)[2:7]))
+
+# filter LIBOR_Data_revise to only include rows where SettleDate is earlier and including 2023-06-30, and create columns
+# xlt3mo using the values of x28, x3mo using the values of x90, x6mo using the values of x180, x9mo using the average of x180 and x365,
+# and x1yr using the average of x365.  Select only the SettleDate, xlt3mo, x3mo, x6mo, x9mo, x1yr columns
+LIBOR_Data_revise <- LIBOR_Data_revise %>% 
+    filter(SettleDate <= '2023-06-30') %>% 
+    mutate(xlt3mo = x28, x3mo = x90, x6mo = x180, x9mo = (x180 + x365) / 2, x1yr = x365) %>% 
+    select(SettleDate, xlt3mo, x3mo, x6mo, x9mo, x1yr)
+
