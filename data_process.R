@@ -422,3 +422,67 @@ ST_Data_Agg_check <- ST_Data_Agg_check %>%
     mutate(LIBORtoTreasury = TermLIBOR - TermUST) %>%
     select(SettleDate, TenorBucket, Product, SpreadtoTreasury, NumTransaction, LIBORtoTreasury, C1A2SpreadtoTreas)
 
+# instantiate a pdf object called st_product_tenor.pdf in the result directory, with height 6 and width 11
+pdf(paste0(dir, '/result/st_product_tenor.pdf'), height = 6, width = 11)
+
+# plot the ST_Data_Agg_check data by SettleDate, for TenorBucket '<3mo',  and plot
+# the SpreadtoTreasury as a geom_line, with color by Product as factor, labels with title term < 3mo, 
+# and y label as spread to Treasury (%). scale x date with date breaks 3 years, with data label format as %Y.
+# put the ledgend at the bottom, and legend has a size 5 text, and title with size 10 text.
+# save the plot in p1
+p1 <- ggplot(ST_Data_Agg_check[TenorBucket == '<3mo'], aes(x = SettleDate)) + 
+    geom_line(aes(y = SpreadtoTreasury, col=factor(Product))) + 
+    labs(title = 'Term < 3mo', x="", y = "Spread to Treasury (%)", color="") + 
+    scale_x_date(date_breaks = '3 years', date_labels = '%Y') + 
+    theme(legend.position = 'bottom', legend.text = element_text(size = 5), plot.title = element_text(size = 10))
+
+# plot the ST_Data_Agg_check data by SettleDate, for TenorBucket '3mo',  and plot
+# the SpreadtoTreasury as a geom_line, with color by Product as factor, labels with title term < 3mo, 
+# and y label as spread to Treasury (%). scale x date with date breaks 3 years, with data label format as %Y.
+# put the ledgend at the bottom, and legend has a size 5 text, and title with size 10 text.
+# save the plot in p2
+p2 <- ggplot(ST_Data_Agg_check[TenorBucket == '3mo'], aes(x = SettleDate)) + 
+    geom_line(aes(y = SpreadtoTreasury, col=factor(Product))) + 
+    labs(title = 'Term = 3mo', x="", y = "Spread to Treasury (%)", color="") + 
+    scale_x_date(date_breaks = '3 years', date_labels = '%Y') + 
+    theme(legend.position = 'bottom', legend.text = element_text(size = 5), plot.title = element_text(size = 10))
+
+# plot the ST_Data_Agg_check data by SettleDate, for TenorBucket '6mo',  and plot
+# the SpreadtoTreasury as a geom_line, with color by Product as factor, labels with title term < 3mo, 
+# and y label as spread to Treasury (%). scale x date with date breaks 3 years, with data label format as %Y.
+# put the ledgend at the bottom, and legend has a size 5 text, and title with size 10 text.
+# save the plot in p3
+p3 <- ggplot(ST_Data_Agg_check[TenorBucket == '6mo'], aes(x = SettleDate)) + 
+    geom_line(aes(y = SpreadtoTreasury, col=factor(Product))) + 
+    labs(title = 'Term = 6mo', x="", y = "Spread to Treasury (%)", color="") + 
+    scale_x_date(date_breaks = '3 years', date_labels = '%Y') + 
+    theme(legend.position = 'bottom', legend.text = element_text(size = 5), plot.title = element_text(size = 10))
+
+# plot the ST_Data_Agg_check data by SettleDate, for TenorBucket '9mo',  and plot
+# the SpreadtoTreasury as a geom_line, with color by Product as factor, labels with title term < 3mo, 
+# and y label as spread to Treasury (%). scale x date with date breaks 3 years, with data label format as %Y.
+# put the ledgend at the bottom, and legend has a size 5 text, and title with size 10 text.
+# save the plot in p4
+p4 <- ggplot(ST_Data_Agg_check[TenorBucket == '9mo'], aes(x = SettleDate)) + 
+    geom_line(aes(y = SpreadtoTreasury, col=factor(Product))) + 
+    labs(title = 'Term = 9mo', x="", y = "Spread to Treasury (%)", color="") + 
+    scale_x_date(date_breaks = '3 years', date_labels = '%Y') + 
+    theme(legend.position = 'bottom', legend.text = element_text(size = 5), plot.title = element_text(size = 10))
+# plot the ST_Data_Agg_check data by SettleDate, for TenorBucket '1yr',  and plot
+# the SpreadtoTreasury as a geom_line, with color by Product as factor, labels with title term < 3mo, 
+# and y label as spread to Treasury (%). scale x date with date breaks 3 years, with data label format as %Y.
+# put the ledgend at the bottom, and legend has a size 5 text, and title with size 10 text.
+# save the plot in p5
+p5 <- ggplot(ST_Data_Agg_check[TenorBucket == '1yr'], aes(x = SettleDate)) + 
+    geom_line(aes(y = SpreadtoTreasury, col=factor(Product))) + 
+    labs(title = 'Term = 1yr', x="", y = "Spread to Treasury (%)", color="") + 
+    scale_x_date(date_breaks = '3 years', date_labels = '%Y') + 
+    theme(legend.position = 'bottom', legend.text = element_text(size = 5), plot.title = element_text(size = 10))
+
+# arrange p1 to p4 in 2 rows and 2 columns
+grid.arrange(p1, p2, p3, p4, nrow = 2, ncol = 2)
+# arrange p5 in a grid in 2 rows and 2 columns
+grid.arrange(p5, nrow = 2, ncol = 2)
+# close the pdf object
+dev.off()
+
