@@ -486,3 +486,58 @@ grid.arrange(p5, nrow = 2, ncol = 2)
 # close the pdf object
 dev.off()
 
+# starting with ST_DataAgg data frame and pipe it into a mutate to create a new column that copies values from SpreadtoTreasury
+# call this new column SpreadtoTreasury_raw as backup, so we can modify the value of SpreadtoTreasury.  
+# use case_when to modify SpreadtoTreasury if SettleDate is prior to Jan. 1, 2010 by setting SpreadtoTreasury to LIBORtoTreasury.
+# otherwise, keep the original SpreadtoTreasury. Similarly, save a backup for Yield called Yield_raw, and modify Yield
+# if SettleDate is prior to Jan. 1, 2010 by setting Yield TermLIBOR, otherwise, keep the original Yield. Also create a new column called
+# ratio_actual, whose value is determined by checking if TenorBucket is in c('<3mo'),  c('3mo'), or otherwise.
+# if it is in c('<3mo'),  then the value is the maximum of SpreadtoTresury + .15 and 0, divided by C1A2SpreadtoTreas + .15.
+# if it is in c('3mo'),  then the value is determined using a similar formula, except the shift amount of .15 is replaced by .12.
+# for all other cases, the value is determined using a similar formula, except the shift amount is 0, i.e. no shift.
+# next the resulting dataframe is piped to filter out rows where C1A2SpreadtoTreas is na, or SpreadtoTreasury is no. 
+# assign the resulting dataframe to ST_Data_Mapping
+ST_Data_Mapping <- ST_Data_Agg %>% 
+    mutate(SpreadtoTresury_raw = SpreadtoTreasury,
+           Yield_raw = Yield,
+           SpreadtoTreasury = case_when(SettleDate < '2010-01-01' ~ LIBORtoTreasury,
+                                        T ~ SpreadtoTreasury),
+           Yield = case_when(SettleDate < '2010-01-01' ~ TermLIBOR,
+                             T ~ Yield),
+           ratio_actual = case_when(TenorBucket %in% c('<3mo') ~ pmax((SpreadtoTreasury + .15) ,0) / (C1A2SpreadtoTreas + .15),
+                                    TenorBucket %in% c('3mo') ~ pmax((SpreadtoTreasury + .12) ,0) / (C1A2SpreadtoTreas + .12),
+                                    T ~ pmax((SpreadtoTreasury + 0) ,0) / (C1A2SpreadtoTreas + 0))) %>%
+    filter(!is.na(C1A2SpreadtoTreas), !is.na(SpreadtoTreasury))
+
+# write ST_Data_Mapping out to a csv file in data directory called modelDataNew.csv
+write.csv(ST_Data_Mapping, paste0(dir, '/data/modelDataNew.csv'), row.names = F)
+
+# pipe ST_Data_Mapping dataframe to a group by function to group the data by TenorBucket column.
+# then compute summary statistics for each TenorBucket group that summarize the correlation between SpreadtoTreasury_raw and C1A2SpreadtoTreas.
+# save it in a new column called SpreadtoTreasury_C1A2, and mutate it to round it to 2 digits.
+# next use arrange function to sort the data, by matching the values of TenorBucket column with the order of c('<3mo', '3mo', '6mo', '9mo', '1yr').
+# save the result in corr_matrix2
+corr_matrix2 <- ST_Data_Mapping %>% 
+    group_by(TenorBucket) %>% 
+    summarise(SpreadtoTreasury_C1A2 = cor(SpreadtoTreasury_raw, C1A2SpreadtoTreas)) %>% 
+    mutate(SpreadtoTreasury_C1A2 = round(SpreadtoTreasury_C1A2, 2)) %>% 
+    arrange(match(TenorBucket, c('<3mo', '3mo', '6mo', '9mo', '1yr')))
+
+# set the column names of corr_matrix2 to Term, and 'Correlation Between ST and C1A2 Spread'
+names(corr_matrix2) <- c('Term', 'Correlation Between ST and C1A2 Spread')
+
+# pipe ST_Data_Mapping dataframe to filter SettleDate to be greater equal to 2010-01-01, group the data by TenorBucket,
+# and summarize the correlation between SpreadtoTreasury_raw and C1A2SpreadtoTreas. save it in a new column called SpreadtoTreasury_C1A2.
+# Basically, this allows us to look at the correlation after Jan. 1, 2010 by TenorBucket.  Save this dataset in corr_matrix3.
+corr_matrix3 <- ST_Data_Mapping %>% 
+    filter(SettleDate >= '2010-01-01') %>% 
+    group_by(TenorBucket) %>% 
+    summarise(SpreadtoTreasury_C1A2 = cor(SpreadtoTreasury_raw, C1A2SpreadtoTreas))
+
+# write the corr_matrix2 to a csv file called st_corr_matrix2.csv
+write.csv(corr_matrix2, paste0(dir, '/st_corr_matrix2.csv'), row.names = F)
+# write the corr_matrix3 to a csv file called st_corr_matrix3.csv
+write.csv(corr_matrix3, paste0(dir, '/st_corr_matrix3.csv'), row.names = F)
+
+
+
