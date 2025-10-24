@@ -282,3 +282,97 @@ LIBOR_Data_revise <- LIBOR_Data_revise %>%
     mutate(xlt3mo = x28, x3mo = x90, x6mo = x180, x9mo = (x180 + x365) / 2, x1yr = x365) %>% 
     select(SettleDate, xlt3mo, x3mo, x6mo, x9mo, x1yr)
 
+# metla the LIBOR_Data_revise data by the SettleDate as id, and TenorBucket as the variable, which currently in the database, we
+# have xlt3mo, x3mo, x6mo, x9mo, x1yr columns, and a value column that is TermLIBOR values
+LIBOR_Data_revise <- melt(LIBOR_Data_revise, id.vars = 'SettleDate', variable.name = 'TenorBucket', value.name = 'TermLIBOR')
+
+# remove all the x's in the TenorBucket column
+LIBOR_Data_revise$TenorBucket <- gsub('x', '', LIBOR_Data_revise$TenorBucket)
+
+# change all the lt3mo in the TenorBucket column to <3mo
+LIBOR_Data_revise$TenorBucket <- gsub('lt3mo', '<3mo', LIBOR_Data_revise$TenorBucket)
+
+# use dcast to transform TBIL_Data from a long format with separate rows for each Date and Term pair
+# to a wide format with each Date has its own row and each unique Term becomes a column,
+# and the Value column contains the corresponding values
+TBIL_Data_revise <- dcast(TBIL_Data, Date ~ Term, value.var = 'Value')
+
+# set the first column name of TBIL_Data_revise to SettleDate and add a 'x' to the front of the columne names of columns 2 to 6 
+# create a c() to do this in one statement and use the paste0 to do the string manipulation
+# this turn column names into SettleDate, x28, x90, x180, x365
+names(TBIL_Data_revise) <- c('SettleDate', paste0('x', names(TBIL_Data_revise)[2:6]))
+
+# mutate TBIL_Data_revise to create a new column xlt3mo that is x28, a new column x3mo that is x90, a new column x6mo that is x180,
+# a new column x9mo that is the average of x180 and x365, and a new column x1yr that is x365, and select only the SettleDate, 
+# xlt3mo, x3mo, x6mo, x9mo, x1yr columns
+TBIL_Data_revise <- TBIL_Data_revise %>% 
+    mutate(xlt3mo = x28, x3mo = x90, x6mo = x180, x9mo = (x180 + x365) / 2, x1yr = x365) %>% 
+    select(SettleDate, xlt3mo, x3mo, x6mo, x9mo, x1yr)
+
+# melt the TBIL_Data_revise data by the SettleDate as id, and TenorBucket as the variable, which currently in the database, we
+# have xlt3mo, x3mo, x6mo, x9mo, x1yr columns, and a value column that is TermUST values
+TBIL_Data_revise <- melt(TBIL_Data_revise, id.vars = 'SettleDate', variable.name = 'TenorBucket', value.name = 'TermUST')
+
+# remove all the x's in the TenorBucket column
+TBIL_Data_revise$TenorBucket <- gsub('x', '', TBIL_Data_revise$TenorBucket)
+# change all the lt3mo in the TenorBucket column to <3mo
+TBIL_Data_revise$TenorBucket <- gsub('lt3mo', '<3mo', TBIL_Data_revise$TenorBucket)
+
+# add TermLIBOR and TermUST to the ST_Data_agg table that currently has SettleDate, TenorBucket, SpreadtoTreasury, Yield and NumTransaction columns
+# implement this by first merging the ST_Data_Agg and LIBOR_Data_revise tables by SettleDate and TenorBucket, and then merging the result
+# with the TBIL_Data_revise table by SettleDate and TenorBucket
+ST_Data_Agg <- merge(ST_Data_Agg, LIBOR_Data_revise, by = c('SettleDate', 'TenorBucket'), all.x = T)
+ST_Data_Agg <- merge(ST_Data_Agg, TBIL_Data_revise, by = c('SettleDate', 'TenorBucket'), all.x = T)
+
+# mutate ST_Data_Agg to create a new column LIBORtoTreasury by taking the difference between TermLIBOR and TermUST,
+# and select only the SettleDate, TenorBucket, SpreadtoTreasury, Yield, TermLIBOR, NumTransaction, LIBORtoTreasury columns
+ST_Data_Agg <- ST_Data_Agg %>% 
+    mutate(LIBORtoTreasury = TermLIBOR - TermUST) %>% 
+    select(SettleDate, TenorBucket, SpreadtoTermTreasury, Yield, TermLIBOR, NumTransaction, LIBORtoTreasury)
+
+# read in C1A2_Data table from the data directory a xlsx file called /data/c1a2.xlsx, set detectDates = T.  Use openxlsx
+# to implement this and cast the result to a data.table
+C1A2_Data <- data.table(openxlsx::read.xlsx(xlsxFile = paste0(dir, '/data/c1a2.xlsx'), detectDates = T))
+
+# set the column names of C1A2_Data by removing all the . or (,),#,/  from the column names. 
+# Use escape syntax for the regex, like \\.|\\(|\\)|\\)|\\%|\\#|\\/
+names(C1A2_Data) <- gsub('\\.|\\(|\\)|\\%|\\#|\\/', '', names(C1A2_Data))
+
+# select only the Date, EffectiveYield, MaturityWAL from the C1A2_Data table
+C1A2_Data <- C1A2_Data %>% select(Date, EffectiveYield, MaturityWAL)
+
+# read in the TBond_Data from /data/bbg_tsy.csv using fread
+TBond_Data <- fread(paste0(dir, '/data/bbg_tsy.csv'))
+
+# reset the column names to Date, UST1M, UST3M, UST6M, UST1Y, UST2Y, UST3Y.
+names(TBond_Data) <- c('Date', 'UST1M', 'UST3M', 'UST6M', 'UST1Y', 'UST2Y', 'UST3Y')
+
+# read in /data/CMT01Y.db using fread and mutate the V1 column to be the Date column and the V2 column to be the CMT1Y column. Do these two operation in one line.
+# when we caste V1 to Date, use the format %m/%d/%Y.  Select only the Date and CMT1Y columns.  Store the result in CMT1Y
+CMT1Y <- fread(paste0(dir, '/data/CMT01Y.db')) %>% 
+    mutate(Date = as.Date(V1, '%m/%d/%Y'), CMT1Y = V2) %>% 
+    select(Date, CMT1Y)
+# also read in CMT2Y and CMT3Y in the same way
+CMT2Y <- fread(paste0(dir, '/data/CMT02Y.db')) %>% 
+    mutate(Date = as.Date(V1, '%m/%d/%Y'), CMT2Y = V2) %>% 
+    select(Date, CMT2Y)
+CMT3Y <- fread(paste0(dir, '/data/CMT03Y.db')) %>% 
+    mutate(Date = as.Date(V1, '%m/%d/%Y'), CMT3Y = V2) %>% 
+    select(Date, CMT3Y)
+
+# combine CMT1Y, 2Y and 3Y into a single data frome called CMT_Data by merging by Date column.
+# implement this by using Reduce and applying a function that takes two data frames and merges them by Date column.
+CMT_Data <- Reduce(function(x, y) merge(x, y, by = 'Date'), list(CMT1Y, CMT2Y, CMT3Y))
+
+# update TBond_Data by first mutate the Date column by casting it to Date and using the format %m/%d/%Y.  Then merge the result with CMT_Data 
+# left joining on the Date column.  And then filling all missing data in UST1Y column with the value in CMT1Y column by coalesce function.
+# do the same for UST2Y and UST 3Y on the same line, finally select only the Date, UST1Y, UST2Y, UST3Y columns.
+TBond_Data <- TBond_Data %>%
+    mutate(Date = as.Date(Date, '%m/%d/%Y')) %>% 
+    left_join(CMT_Data, by = 'Date') %>% 
+    mutate(UST1Y = coalesce(UST1Y, CMT1Y), UST2Y = coalesce(UST2Y, CMT2Y), UST3Y = coalesce(UST3Y, CMT3Y)) %>% 
+    select(Date, UST1Y, UST2Y, UST3Y)
+
+# merge C1A2_Data and TBond_Data by Date column
+C1A2_Data <- merge(C1A2_Data, TBond_Data, by = 'Date', all.x = T)
+
