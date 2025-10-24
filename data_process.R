@@ -376,3 +376,49 @@ TBond_Data <- TBond_Data %>%
 # merge C1A2_Data and TBond_Data by Date column
 C1A2_Data <- merge(C1A2_Data, TBond_Data, by = 'Date', all.x = T)
 
+# Mutate the C1A2_Data by adding a new column C1A2SpreadtoTreas based on the difference between EffectiveYield
+# and a value calculated conditional on MaturityWAL's value.  When MaturityWAL is less than 2, the value is
+# the interpolated value obtained by interpolating between the points (1, UST1Y) and (2, UST2Y) using MaturityWAL,
+# otherwise, the value is the interpolated value obtained by interpolating between the points (2, UST2Y) and (3, UST3Y) using MaturityWAL.
+# Then the C1A2_Data is mutated by rename the Date to SettleDate, finally select only the SettleDate, C1A2SpreadtoTreas and EffectiveYield
+C1A2_Data <- C1A2_Data %>% 
+    mutate(C1A2SpreadtoTreas = EffectiveYield - 
+           case_when( MaturityWAL < 2 ~ UST1Y + (MaturityWAL - 1) * (UST2Y - UST1Y) / (2 - 1),
+                      TRUE ~ UST2Y + (MaturityWAL - 2) * (UST3Y - UST2Y) / (3 - 2))) %>% 
+    mutate(SettleDate = Date) %>% 
+    select(SettleDate, C1A2SpreadtoTreas, EffectiveYield)
+
+# use write.csv to save to C1A2_Data.csv, disable row.names
+write.csv(C1A2_Data, paste0(dir, '/data/C1A2_Data.csv'), row.names = F)
+
+# merge ST_Data_Agg and C1A2_Data by SettleDate column
+ST_Data_Agg <- merge(ST_Data_Agg, C1A2_Data, by = 'SettleDate', all.x = T)
+
+# write.csv to save to ST_Data_Agg.csv, disable row.names
+write.csv(ST_Data_Agg, paste0(dir, '/data/ST_Data_Agg.csv'), row.names = F)
+
+# Take the ST_Data and group it by SettleDatee, TenorBucket, and Product, 
+# then pipe the grouped dataset to summarize and calculate SpreadtoTreasury as weighted mean of SpreadtoTermTreasury weighted by Par,
+# and calculate NumTransaction as number of rows 
+# case this result to a data.table and store the result in ST_Data_Agg_check
+ST_Data_Agg_check <- ST_Data %>% 
+    group_by(SettleDate, TenorBucket, Product) %>% 
+    summarise(SpreadtoTreasury = weighted.mean(SpreadtoTermTreasury_calc, Par), 
+              NumTransaction = n()) %>% 
+    data.table()
+
+# merge ST_Data_Agg_check and C1A2_Data by SettleDate column, thereby incorporating the C1A2SpreadtoTreas and EffectiveYield columns into ST_Data_Agg_check
+ST_Data_Agg_check <- merge(ST_Data_Agg_check, C1A2_Data, by = 'SettleDate', all.x = T)
+
+# merge ST_Data_Agg_check and LIBOR_Data_revise by SettleDate and TenorBucket, thereby incorporating the TermLIBOR column into ST_Data_Agg_check
+ST_Data_Agg_check <- merge(ST_Data_Agg_check, LIBOR_Data_revise, by = c('SettleDate', 'TenorBucket'), all.x = T)
+
+# merge ST_Data_Agg_check and TBIL_Data_revise by SettleDate and TenorBucket, thereby incorporating the TermUST column into ST_Data_Agg_check
+ST_Data_Agg_check <- merge(ST_Data_Agg_check, TBIL_Data_revise, by = c('SettleDate', 'TenorBucket'), all.x = T)
+
+# mutate ST_Data_Agg_check to create a new column LIBORtoTreasury by taking the difference between TermLIBOR and TermUST,
+# and select only the SettleDate, TenorBucket, Product, SpreadtoTreasury, NumTransaction, LIBORtoTreasury, C1A2SpreadtoTreas columns
+ST_Data_Agg_check <- ST_Data_Agg_check %>% 
+    mutate(LIBORtoTreasury = TermLIBOR - TermUST) %>%
+    select(SettleDate, TenorBucket, Product, SpreadtoTreasury, NumTransaction, LIBORtoTreasury, C1A2SpreadtoTreas)
+
