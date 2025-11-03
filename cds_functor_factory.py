@@ -124,7 +124,7 @@ class YieldCurveGroup:
             'InterpCutover': self._input_params['InterpCutover'],
             'SolverSettings': self._input_params['SolverSettings'],
         }
-        
+
 class CDSFunctor(ABC):
     def __init__(
         self,
@@ -140,6 +140,69 @@ class CDSFunctor(ABC):
         self._functor_name = functor_name
         self._yield_curve_group = yield_curve_group
         self._components = components
+        self._methods = methods
+
+    def __call__(self):
+        return gda.Functor(
+            self.functor_name,
+            {
+                component: getattr(self, 'get_' + component.lower())()
+                if self.get_call_type(component, self.methods) == object
+                else self._input_params[component]
+                for component in self.components
+            },
+        )
+
+    @classmethod
+    def get_call_type(cls, component, methods):
+        return object if component in methods else str
+
+    @abstractmethod
+    def get_instrument(self):
+        pass
+
+    @property
+    def get_trade_name(self):
+        # a string formed by . separated substrings.  First substrings is the value of self._input_params with the key Ticker,
+        # followed by the value of the key Subordination, then RestructuringClause, then Currency
+        return (
+            f"{self._input_params['Ticker']}."
+            f"{self._input_params['Subordination']}."
+            f"{self._input_params['RestructuringClause']}."
+            f"{self._input_params['Currency']}.MNTH"
+        )
+    
+    @property
+    def input_params(self):
+        return self._input_params
+
+    @property
+    def functor_name(self):
+        return self._functor_name
+
+    @property
+    def tradedate(self):
+        return self._tradedate
+
+    @property
+    def yield_curve_group(self):
+        return self._yield_curve_group
+
+    @property
+    def components(self):
+        return self._components
+
+    @components.setter
+    def components(self, components):
+        self._components = components
+    
+    @property
+    def methods(self):
+        return self._methods
+
+#methods.setter
+    @methods.setter
+    def methods(self, methods):
         self._methods = methods
 
 class CDSMarketDataFunctor(CDSFunctor):
