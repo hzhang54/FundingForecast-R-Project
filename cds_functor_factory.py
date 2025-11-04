@@ -209,8 +209,137 @@ class CDSMarketDataFunctor(CDSFunctor):
     @property
     def create_cashflow_schedule(self):
         return make_cashflow_schedule(self._input_params) # TODO: to implement
+    
+    def get_instrument(self):
+        # return a gda.Function with 'Credit.CDSInst' as the first arg
+        # and a dictionary as the second arg.  The dict with key PremiumLeg is a dict with a key Cashflows, and value given by self.create_cashflow_schedule
+        # and the ProtectionLeg is an empty dict
+        return gda.Functor(
+            'Credit.CDSInst',
+            {
+                'PremiumLeg': {
+                    'Cashflows': self.create_cashflow_schedule,
+                },
+                'ProtectionLeg': {},
+            },
+        )
+    
+    def get_yield_curve(self):
+        # return a dict with the key Name has the value that is a string starting with YCG. followed by the value of the Currency key in self._input_params
+        # and the key YieldCurve has the value that is the result of calling self._yield_curve_group
+        return {
+            'Name': f'YCG.{self._input_params["Currency"]}',
+            'YieldCurve': self._yield_curve_group,
+        }
+    
+    def get_config_options(self):
+        return self._input_params['ConfigOptions']
 
+    
+    def get_cdscreditcurves(self):
+        # return an array with a dict inside, the CreditCurve key is created by calling self.create_credit_curve
+        # passing in _tradedate, and the key Name has the value from self.get_trade_name
+        return [
+            {
+                'CreditCurve': self.create_credit_curve(self._tradedate),
+                'Name': f'{self.get_trade_name}',
+            }
+        ]
+
+    def create_credit_curve(self, run_date):
+        # return a gda.Function with 'Credit.CreditCurve' as the first arg
+        # and a dictionary as the second arg.  The dict with key CalibInsts is an array with a dict inside
+        # the key FixedRate has value gotten from self._input_params with the key Coupon,
+        # the key Quote has value gotten from self._input_params with the key cds_spread
+        # the key Type has value gotten from self._input_params with the key Quotes_type
+        # the key Instrument has value gotten from self.get_instrument()
+        return gda.Functor(
+            'Credit.CreditCurve',
+            {
+                'CalibInsts': [
+                    {
+                        'FixedRate': self._input_params['Coupon'],
+                        'Quote': self._input_params['cds_spread'],
+                        'Type': self._input_params['Quotes_type'],
+                        'Instrument': self.get_instrument(),
+                    }
+                ],
+                # the key calibOptions has a value that is a dict
+                # Each key in this dict is gotten from self._input_params with the key of the same name
+                # the keys are AllowIncompleteCurve, ExcludeMaturedInsts, FloorHazardRates, FloorProbabilities, InterpConv, RelAcc, RemoveBondCaches
+                # SmoothCurveCalibrationParams, UseISDASettleDateCalib, UseLegacyInfiniteSpreadCheck,
+                # UseMaxPossibleQuote, useSmoothCurveCalibration
+                'calibOptions': {
+                    'AllowIncompleteCurve': self._input_params['AllowIncompleteCurve'],
+                    'ExcludeMaturedInsts': self._input_params['ExcludeMaturedInsts'],
+                    'FloorHazardRates': self._input_params['FloorHazardRates'],
+                    'FloorProbabilities': self._input_params['FloorProbabilities'],
+                    'InterpConv': self._input_params['InterpConv'],
+                    'RelAcc': self._input_params['RelAcc'],
+                    'RemoveBondCaches': self._input_params['RemoveBondCaches'],
+                    'SmoothCurveCalibrationParams': self._input_params['SmoothCurveCalibrationParams'],
+                    'UseISDASettleDateCalib': self._input_params['UseISDASettleDateCalib'],
+                    'UseLegacyInfiniteSpreadCheck': self._input_params['UseLegacyInfiniteSpreadCheck'],
+                    'UseMaxPossibleQuote': self._input_params['UseMaxPossibleQuote'],
+                    'useSmoothCurveCalibration': self._input_params['useSmoothCurveCalibration'],
+                },
+                # the value for CreditDetails is similar to the above, but the keys are
+                # Currency, RestructuringClause, Subordination, Ticker
+                'CreditDetails': {
+                    'Currency': self._input_params['Currency'],
+                    'RestructuringClause': self._input_params['RestructuringClause'],
+                    'Subordination': self._input_params['Subordination'],
+                    'Ticker': self._input_params['Ticker'],
+                },
+                # the value for the key FundingID is from _input_params with key of the same name
+                'FundingID': self._input_params['FundingID'],
+                # similarly for Recovery
+                'Recovery': self._input_params['constant_recovery'],
+                'YieldCurve': self._yield_curve_group,
+            },
+        )
+            
 class CDSTradeFunctor(CDSFunctor):
     @property
     def create_cashflow_schedule(self):
         return make_trade_cashflow_schedule(self._input_params) # TODO: To implement
+
+    # get_instrument function return a gda.Functor with the string Credit.CDSInst as the first arg,
+    # and a dictionary as the second arg. The keys of this dict are AccruedInDefault, ExtraAccDay,
+    # PremiumLeg and ProtectionLeg
+    def get_instrument(self):
+        return gda.Functor(
+            'Credit.CDSInst',
+            {
+                'AccruedInDefault': self._input_params['AccruedInDefault'],
+                'ExtraAccDay': self._input_params['ExtraAccDay'],
+                'PremiumLeg': {
+                    'Cashflows': self.create_cashflow_schedule,
+                },
+                'ProtectionLeg': {},
+            },
+        )
+    
+    def get_basket(self):
+        '''
+        Basket can be either a list or a name.  A dedicated method is implemented to allow easy extension in the future
+        '''
+        # return a gda.Function with the string Credit.CreditBasket, and a dict with the key Basket have the value
+        # that is a dict with the key CreditCurve with value from self.get_trade_name
+        return gda.Functor(
+            'Credit.CreditBasket',
+            {
+                'Basket': {
+                    'CreditCurve': self.get_trade_name,
+                }
+            },
+        )
+    # get_yieldcurve function return a dict with the key FundingId and YieldCurve
+    def get_yieldcurve(self):
+        return {
+            'FundingId': self._input_params['FundingID'],
+            'YieldCurve': self._yield_curve_group
+        }
+
+    def get_tradedate(self):
+        return self._tradedate
