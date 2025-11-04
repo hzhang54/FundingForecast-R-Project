@@ -18,6 +18,14 @@ class YieldCurveGroup:
     def __call__(self):
         return self.get_yield_curve()
 
+    @property
+    def input_params(self):
+        return self._input_params
+
+    @property
+    def ref_date(self):
+        return self._ref_date
+
     def get_yield_curve(self):
         input_params = self._input_params
         return gda.Functor(

@@ -170,4 +170,50 @@ class CdsPricer:
         
         return result
 
+class EfficientCDSValuator(ValuatorBase):
+    def __init__(self, model=None):
+        super().__init__(model)
+
+    @staticmethod
+    def depends(loan, model, model_deps):
+
+        valuation_ref_date = []
+        if loan.valuation_ref_date:
+            valuation_ref_date = [loan.valuation_ref_date]
         
+        run_dates = [model.ref_date] + valuation_ref_date + model.forecast_dates
+
+        for d in run_dates:
+            keys = model.cds_keys_series(loan)
+            [model_deps.add_item(Models.CDS_SPREAD_MODELS, base_date=d, key=key) for key in keys]
+            
+            keys = model.fed_rates_keys_series(loan)
+            if model.input_params.is_backtesting:
+                [model_deps.add_item(Models.LIBOR, base_date=d, key=key) for key in keys]
+            else:
+                [model_deps.add_item(Models.SOFR, base_date=d, key=key) for key in keys]
+
+            model_deps.add_item(Models.LGD_MODELS, base_date=d, key=(loan.LGD_KEY_2, loan.LGD_KEY_1))
+
+    def computeLocalCurrencyLoss(self, pricer_params, market_data, trade_functor, requests, run_date):
+
+        logger.info('Valuing CDS as at %s.' % run_date)
+
+        args = {
+            'Trade': trade_functor,
+            'MarketData': market_data,
+            'PricingParams': pricer_params,
+        }
+
+        pricer = gda.Functor('Credit.CDSPrice', args)
+
+        success = False
+
+        while not success:
+            try:
+                result = [pricer.apply(r)[r] for r in requests if r in pricer.queryValidRequests()]
+                success = True
+            except gda.Exception as e:
+                logger.warning(f'Retrying - pricer ran into error during pricing.  Error message: \n{e}')
+        
+        return result
