@@ -539,5 +539,80 @@ write.csv(corr_matrix2, paste0(dir, '/st_corr_matrix2.csv'), row.names = F)
 # write the corr_matrix3 to a csv file called st_corr_matrix3.csv
 write.csv(corr_matrix3, paste0(dir, '/st_corr_matrix3.csv'), row.names = F)
 
+# createa pdf located at /result/st_tenor_vs_c1a2.pdf with height 6 and width 11
+pdf(paste0(dir, '/result/st_tenor_vs_c1a2.pdf'), height = 6, width = 11)
+# plot the ST_Data_Mapping dataframe by SettleDate, for TenorBucket '<3mo',  and plot
+# the SpreadtoTreasury_raw as a geom_line, with color by ST Spread, 
+# add a line for LIBORtoTreasury, with color by 'LIBOR Spread',
+# add a line for C1A2SpreadtoTreas, with color by 'C1A2 Spread', and alpha of 0.4 to make it more transparent
+# labels with title term < 3mo, and y label as spread to Treasury (%). scale x date with date breaks 3 years, with data label format as %Y.
+# put the ledgend at the bottom, and legend has a size 5 text, and title with size 10 text.
+# save the plot in p1
+p1 <- ggplot(ST_Data_Mapping[TenorBucket == '<3mo'], aes(x = SettleDate)) + 
+    geom_line(aes(y = SpreadtoTreasury_raw, col='ST Spread')) + 
+    geom_line(aes(y = LIBORtoTreasury, col='LIBOR Spread')) +
+    geom_line(aes(y = C1A2SpreadtoTreas, col='C1A2 Spread'), alpha = 0.4) +
+    labs(title = 'Term < 3mo', x="", y = "Spread to Treasury (%)", color="") + 
+    scale_x_date(date_breaks = '3 years', date_labels = '%Y') + 
+    # manually set the colors for the lines
+    scale_color_manual(values = c('ST Spread' = 'black', 'LIBOR Spread' = 'blue', 'C1A2 Spread' = 'darkred')) +
+    theme(legend.position = 'bottom', legend.text = element_text(size = 5), plot.title = element_text(size = 10))
 
+# similar plot as above, but plot for TenorBucket 3mo, and save the result in p2
+p2 <- ggplot(ST_Data_Mapping[TenorBucket == '3mo'], aes(x = SettleDate)) + 
+    geom_line(aes(y = SpreadtoTreasury_raw, col='ST Spread')) + 
+    geom_line(aes(y = LIBORtoTreasury, col='LIBOR Spread')) +
+    geom_line(aes(y = C1A2SpreadtoTreas, col='C1A2 Spread'), alpha = 0.4) +
+    labs(title = 'Term = 3mo', x="", y = "Spread to Treasury (%)", color="") + 
+    scale_x_date(date_breaks = '3 years', date_labels = '%Y') + 
+    # manually set the colors for the lines
+    scale_color_manual(values = c('ST Spread' = 'black', 'LIBOR Spread' = 'blue', 'C1A2 Spread' = 'darkred')) +
+    theme(legend.position = 'bottom', legend.text = element_text(size = 5), plot.title = element_text(size = 10))
+
+# similar plot as above, but plot for TenorBucket 6mo, and save the result in p3
+p3 <- ggplot(ST_Data_Mapping[TenorBucket == '6mo'], aes(x = SettleDate)) + 
+    geom_line(aes(y = SpreadtoTreasury_raw, col='ST Spread')) + 
+    geom_line(aes(y = LIBORtoTreasury, col='LIBOR Spread')) +
+    geom_line(aes(y = C1A2SpreadtoTreas, col='C1A2 Spread'), alpha = 0.4) +
+    labs(title = 'Term = 6mo', x="", y = "Spread to Treasury (%)", color="") + 
+    scale_x_date(date_breaks = '3 years', date_labels = '%Y') + 
+    # manually set the colors for the lines
+    scale_color_manual(values = c('ST Spread' = 'black', 'LIBOR Spread' = 'blue', 'C1A2 Spread' = 'darkred')) +
+    theme(legend.position = 'bottom', legend.text = element_text(size = 5), plot.title = element_text(size = 10))
+# similar plot as above, but plot for TenorBucket 9mo, and save the result in p4
+p4 <- ggplot(ST_Data_Mapping[TenorBucket == '9mo'], aes(x = SettleDate)) + 
+    geom_line(aes(y = SpreadtoTreasury_raw, col='ST Spread')) + 
+    geom_line(aes(y = LIBORtoTreasury, col='LIBOR Spread')) +
+    geom_line(aes(y = C1A2SpreadtoTreas, col='C1A2 Spread'), alpha = 0.4) +
+    labs(title = 'Term = 9mo', x="", y = "Spread to Treasury (%)", color="") + 
+    scale_x_date(date_breaks = '3 years', date_labels = '%Y') + 
+    # manually set the colors for the lines
+    scale_color_manual(values = c('ST Spread' = 'black', 'LIBOR Spread' = 'blue', 'C1A2 Spread' = 'darkred')) +
+    theme(legend.position = 'bottom', legend.text = element_text(size = 5), plot.title = element_text(size = 10))
+# similar plot as above, but plot for TenorBucket 1yr, and save the result in p5
+p5 <- ggplot(ST_Data_Mapping[TenorBucket == '1yr'], aes(x = SettleDate)) + 
+    geom_line(aes(y = SpreadtoTreasury_raw, col='ST Spread')) + 
+    geom_line(aes(y = LIBORtoTreasury, col='LIBOR Spread')) +
+    geom_line(aes(y = C1A2SpreadtoTreas, col='C1A2 Spread'), alpha = 0.4) +
+    labs(title = 'Term = 1yr', x="", y = "Spread to Treasury (%)", color="") + 
+    scale_x_date(date_breaks = '3 years', date_labels = '%Y') + 
+    # manually set the colors for the lines
+    scale_color_manual(values = c('ST Spread' = 'black', 'LIBOR Spread' = 'blue', 'C1A2 Spread' = 'darkred')) +
+    theme(legend.position = 'bottom', legend.text = element_text(size = 5), plot.title = element_text(size = 10))
+
+# arrange p1 to p5 in 3 rows and 2 columns, add a table with corr_matrix2 with rows null
+grid.arrange(p1, p2, p3, p4, p5, tableGrob(corr_matrix2, rows = NULL), nrow = 3, ncol = 2)
+
+# only plot spread to treasury raw by tenors.  No LIBOR spread of C1A2 spread and save in p6
+p6 <- ggplot(ST_Data_Mapping, aes(x = SettleDate)) + 
+    geom_line(aes(y = SpreadtoTreasury_raw, col=factor(TenorBucket))) + 
+    labs(title = 'all terms', x="", y = "Spread to Treasury (%)", color="") +
+    scale_x_date(date_breaks = '3 years', date_labels = '%Y') + 
+    theme(legend.position = 'bottom', legend.text = element_text(size = 5), plot.title = element_text(size = 10))
+
+# arrange p6 in a grid in 1 row and 1 column
+grid.arrange(p6, nrow = 1, ncol = 1)
+
+# close the pdf object
+dev.off()
 
