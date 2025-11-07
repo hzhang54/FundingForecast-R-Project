@@ -689,3 +689,106 @@ write.csv(ratio_summary, paste0(dir, '/result/ratio_summary_v4.csv'), row.names 
 # also write ST_Data_forecast out to insample_v4.csv
 write.csv(ST_Data_forecast, paste0(dir, '/result/insample_v4.csv'), row.names = F)
 
+### Ongoing Monitoring Thresholds calc
+# take ST_Data_forecast and group by TenorBucket 
+# and summarize by the mean of the Error, and store the result in ST_OMP
+ST_OMP <- ST_Data_forecast %>% 
+    group_by(TenorBucket) %>% 
+    summarise(Error = mean(Error))
+# merge ST_Data_forecast with ST_OMP based on TenorBucket
+# and store the result in ST_Data_forecast
+ST_Data_forecast <- merge(ST_Data_forecast, ST_OMP, by = 'TenorBucket', all.x = T)
+# take ST_Data_forecast and add a column called Breach
+# whose value is 0 if Error is greater than -2 * Error_SD and if Error is less than 2 * Error_SD,
+# otherwise the value is 1
+ST_Data_forecast <- ST_Data_forecast %>% 
+    mutate(Breach = ifelse(Error >= -2 * Error_SD & Error <= 2 * Error_SD ~ 0, T ~ 1))
+
+# use dcast to transform ST_Data_forecast from a long format with separate rows for each SettleDate and TenorBucket pair
+# to a wide format with each SettleDate has its own row and each unique TenorBucket becomes a column,
+# and the Breach column contains the corresponding values
+ST_OMP_Summary <- dcast(ST_Data_forecast, SettleDate ~ TenorBucket, value.var = 'Breach')
+
+# write ST_OMP_Summary out to ST_OMP_Summary.csv
+write.csv(ST_OMP_Summary, paste0(dir, '/result/ST_OMP_Summary.csv'), row.names = F)
+
+# create a PDF file called st_insample_1buckets_v4.pdf
+pdf(paste0(dir, '/result/st_insample_1buckets_v4.pdf'), height = 12, width = 11)
+
+
+# plot the ST_Data_forecast dataframe by SettleDate, for TenorBucket '<3mo',  and plot
+# the SpreadtoTreasury_raw*100 as a geom_line, with color by ST Spread, 
+# add a line for SpreadtoTreasury_forecast*100, with color by 'ST Spread Forecast',
+# add a line for LIBORtoTreasury*100, with color by 'LIBOR Spread', and alpha of 0.4 to make it more transparent
+# add a line for C1A2SpreadtoTreas*100, with color by 'C1A2 Spread', and alpha of 0.4 to make it more transparent
+# set linewidth for the 4 lines as 0.1 using scale_discrete_manual 
+# labels with title term < 3mo and paste in 'Spreads (bps)', and x, y, color labels are empty string 
+# scale x date with date breaks 3 years, with data label format as %Y.
+# use scale color manual set the colors for the lines
+# use theme to put the ledgend at the bottom
+# save the plot in p1
+p1 <- ggplot(ST_Data_forecast[TenorBucket == '<3mo'], aes(x = SettleDate)) + 
+    geom_line(aes(y = SpreadtoTreasury_raw*100, col='ST Spread')) + 
+    geom_line(aes(y = SpreadtoTreasury_forecast*100, col='ST Spread Forecast')) +
+    geom_line(aes(y = LIBORtoTreasury*100, col='LIBOR Spread'), alpha = 0.4) +
+    geom_line(aes(y = C1A2SpreadtoTreas*100, col='C1A2 Spread'), alpha = 0.4) +
+    scale_discrete_manual("linewidth", values = c(0.1, 0.1, 0.1, 0.1)) +
+    labs(title = paste0('< 3mo', ' Spreads (bps)'), x="", y = "", color="") + 
+    scale_x_date(date_breaks = '3 years', date_labels = '%Y') + 
+    scale_color_manual(values = c('ST Spread' = 'gray50', 'ST Spread Forecast' = 'dodgerblue', 'LIBOR Spread' = 'red', 'C1A2 Spread' = 'purple')) +
+    theme(legend.position = 'bottom')
+    
+# similar plot as above, but plot for TenorBucket 3mo, and save the result in p2
+p2 <- ggplot(ST_Data_forecast[TenorBucket == '3mo'], aes(x = SettleDate)) + 
+    geom_line(aes(y = SpreadtoTreasury_raw*100, col='ST Spread')) + 
+    geom_line(aes(y = SpreadtoTreasury_forecast*100, col='ST Spread Forecast')) +
+    geom_line(aes(y = LIBORtoTreasury*100, col='LIBOR Spread'), alpha = 0.4) +
+    geom_line(aes(y = C1A2SpreadtoTreas*100, col='C1A2 Spread'), alpha = 0.4) +
+    scale_discrete_manual("linewidth", values = c(0.1, 0.1, 0.1, 0.1)) +
+    labs(title = paste0('3mo', ' Spreads (bps)'), x="", y = "", color="") + 
+    scale_x_date(date_breaks = '3 years', date_labels = '%Y') + 
+    scale_color_manual(values = c('ST Spread' = 'gray50', 'ST Spread Forecast' = 'dodgerblue', 'LIBOR Spread' = 'red', 'C1A2 Spread' = 'purple')) +
+    theme(legend.position = 'bottom')
+
+# similar plot as above, but plot for TenorBucket 6mo, and save the result in p3
+p3 <- ggplot(ST_Data_forecast[TenorBucket == '6mo'], aes(x = SettleDate)) + 
+    geom_line(aes(y = SpreadtoTreasury_raw*100, col='ST Spread')) + 
+    geom_line(aes(y = SpreadtoTreasury_forecast*100, col='ST Spread Forecast')) +
+    geom_line(aes(y = LIBORtoTreasury*100, col='LIBOR Spread'), alpha = 0.4) +
+    geom_line(aes(y = C1A2SpreadtoTreas*100, col='C1A2 Spread'), alpha = 0.4) +
+    scale_discrete_manual("linewidth", values = c(0.1, 0.1, 0.1, 0.1)) +
+    labs(title = paste0('6mo', ' Spreads (bps)'), x="", y = "", color="") + 
+    scale_x_date(date_breaks = '3 years', date_labels = '%Y') + 
+    scale_color_manual(values = c('ST Spread' = 'gray50', 'ST Spread Forecast' = 'dodgerblue', 'LIBOR Spread' = 'red', 'C1A2 Spread' = 'purple')) +
+    theme(legend.position = 'bottom')
+
+# similar plot as above, but plot for TenorBucket 9mo, and save the result in p4
+p4 <- ggplot(ST_Data_forecast[TenorBucket == '9mo'], aes(x = SettleDate)) + 
+    geom_line(aes(y = SpreadtoTreasury_raw*100, col='ST Spread')) + 
+    geom_line(aes(y = SpreadtoTreasury_forecast*100, col='ST Spread Forecast')) +
+    geom_line(aes(y = LIBORtoTreasury*100, col='LIBOR Spread'), alpha = 0.4) +
+    geom_line(aes(y = C1A2SpreadtoTreas*100, col='C1A2 Spread'), alpha = 0.4) +
+    scale_discrete_manual("linewidth", values = c(0.1, 0.1, 0.1, 0.1)) +
+    labs(title = paste0('9mo', ' Spreads (bps)'), x="", y = "", color="") + 
+    scale_x_date(date_breaks = '3 years', date_labels = '%Y') + 
+    scale_color_manual(values = c('ST Spread' = 'gray50', 'ST Spread Forecast' = 'dodgerblue', 'LIBOR Spread' = 'red', 'C1A2 Spread' = 'purple')) +
+    theme(legend.position = 'bottom')
+# similar plot as above, but plot for TenorBucket 1yr, and save the result in p5
+p5 <- ggplot(ST_Data_forecast[TenorBucket == '1yr'], aes(x = SettleDate)) + 
+    geom_line(aes(y = SpreadtoTreasury_raw*100, col='ST Spread')) + 
+    geom_line(aes(y = SpreadtoTreasury_forecast*100, col='ST Spread Forecast')) +
+    geom_line(aes(y = LIBORtoTreasury*100, col='LIBOR Spread'), alpha = 0.4) +
+    geom_line(aes(y = C1A2SpreadtoTreas*100, col='C1A2 Spread'), alpha = 0.4) +
+    scale_discrete_manual("linewidth", values = c(0.1, 0.1, 0.1, 0.1)) +
+    labs(title = paste0('1yr', ' Spreads (bps)'), x="", y = "", color="") + 
+    scale_x_date(date_breaks = '3 years', date_labels = '%Y') + 
+    scale_color_manual(values = c('ST Spread' = 'gray50', 'ST Spread Forecast' = 'dodgerblue', 'LIBOR Spread' = 'red', 'C1A2 Spread' = 'purple')) +
+    theme(legend.position = 'bottom')
+
+# arrange p1 to p5 in 3 rows and 2 columns 
+gridExtra::grid.arrange(p1, p2, p3, p4, p5, nrow = 3, ncol = 2)
+
+# close the pdf file
+dev.off()
+
+## EST 1Q24 forecast
