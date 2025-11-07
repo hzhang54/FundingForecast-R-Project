@@ -616,3 +616,76 @@ grid.arrange(p6, nrow = 1, ncol = 1)
 # close the pdf object
 dev.off()
 
+buckets <- 1
+ST_Data_forecast <- data.table()
+ratio_summary <- data.table()
+negative_mean <- data.table()
+
+# loop through each term buckets, use i as the loop variable
+for (i in c('<3mo', '3mo', '6mo', '9mo', '1yr')) {
+    # Look at ST_Data_Mapping that has the columns SettleDate, C1A2SpreadtoTreas, SpreadtoTreasury, and ratio_actual
+    # filter out the tenor bucket i 
+    data.i <- ST_Data_Mapping %>% filter(TenorBucket == i)
+    # store all data in the bucket with negative spreads in negative_mean.i
+    # and further summarize the mean, medium, standard deviation and
+    # .025, .05, .1, .25, .75 quantile, as well as count of negative spreads
+    negative_mean.i <- data.i %>% filter(SpreadtoTreasury < 0) %>% 
+        summarise(mean_spread = mean(SpreadtoTreasury), 
+                  median_spread = median(SpreadtoTreasury), 
+                  sd_spread = sd(SpreadtoTreasury), 
+                  q.025 = quantile(SpreadtoTreasury, .025), 
+                  q.05 = quantile(SpreadtoTreasury, .05), 
+                  q.1 = quantile(SpreadtoTreasury, .1), 
+                  q.25 = quantile(SpreadtoTreasury, .25), 
+                  q.75 = quantile(SpreadtoTreasury, .75),
+                  count = n()) %>% 
+        mutate(tenor = i) # add a column called tenor that save the tenor i
+
+    # filter out the tenor bucket i 
+    # get a seq that are quantile 0 and 1 of the C1A2SpreadtoTreas, basically the max and min of the C1A2SpreadtoTreas
+    # and store it in bucket.i
+    bucket.i <- c(quantile(ST_Data_Mapping$C1A2SpreadtoTreas, c(seq(0, 1, 1))))
+    # set the first element (or the min) to 0
+    bucket.i[1] <- 0
+
+    # categorize data.i$C1A2SpreadtoTreas into buckets based on bucket.i
+    # first cut() is used to divide data.i$C1A2SpreadtoTreas into intervals specified by bucket.i
+    # Make sure the lowest value is include din the first bucket
+    # creates labels for each bucket like bucket1, ... bucketN and store the lable in a new column called bucket
+    # although here was only have 1 bucket.
+    data.i$bucket <- cut(data.i$C1A2SpreadtoTreas, bucket.i, labels = paste0('bucket', 1:buckets), include.lowest = T)
+
+    # take data.i and for each of the bucket (just 1 here), (we have only positive spreads since we set the min to 0)
+    # summarize by mean of the ratio_actual, and take it as forecast, and stored in ratio_forecast
+    # mutate and set tenor bucket to the value i, and store the result in ratio.i
+    ratio.i <- data.i %>% 
+        group_by(bucket) %>% 
+        summarise(ratio_forecast = mean(ratio_actual)) %>% 
+        mutate(tenor = i)
+
+    # combine ratio.i, lower bound lb which is set to bucket.i's element 1 to buckets, and upper bound ub 
+    # which is set to bucket.i's element 2 to buckets+1 and store the resulted data.table back into ratio.i
+    ratio.i <- data.table(ratio.i, lb = bucket.i[1:buckets], ub = bucket.i[2:(buckets+1)])
+    # for buckets = 1, lb is bucket.i[1:1], which is 0 and ub is bucket.i[2:2] which is max
+    # left join data.i with a subset of ratio.i (containing the bucket and ratio_forecast colums) based on bucket column
+    # and store the result in data.i
+    # further mutate by creating new columns to store forecast spread to tsy (called SpreadtoTreasury_forecast)
+    # which is calculated as C1A2SpreadtoTreas * ratio_forecast
+    # crate a new columb called Error which is SpreadtoTreasury - SpreadtoTreasury_forecast
+    data.i <- data.i %>% 
+        left_join(ratio.i[, list(bucket, ratio_forecast)], by = 'bucket') %>% 
+        mutate(SpreadtoTreasury_forecast = C1A2SpreadtoTreas * ratio_forecast) %>% 
+        mutate(Error = SpreadtoTreasury - SpreadtoTreasury_forecast)
+    # accumulate the ST_Data_forecast with data.i.  One row for a tenor
+    ST_Data_forecast <- rbind(ST_Data_forecast, data.i)
+    # accumulate the ratio_summary with ratio.i
+    ratio_summary <- rbind(ratio_summary, ratio.i)
+    # accumulate negative_mean with negative_mean.i
+    negative_mean <- rbind(negative_mean, negative_mean.i)
+}
+
+# write ratio_summary out to ratio_summary_v4.csv
+write.csv(ratio_summary, paste0(dir, '/result/ratio_summary_v4.csv'), row.names = F)
+# also write ST_Data_forecast out to insample_v4.csv
+write.csv(ST_Data_forecast, paste0(dir, '/result/insample_v4.csv'), row.names = F)
+
