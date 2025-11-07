@@ -792,3 +792,35 @@ gridExtra::grid.arrange(p1, p2, p3, p4, p5, nrow = 3, ncol = 2)
 dev.off()
 
 ## EST 1Q24 forecast
+# read in the /macro/macro.csv into EST_Data
+EST_Data <- fread(paste0(dir, '/macro/macro.csv'))
+
+# two lines of macro.csv look like
+# Cycle |ESTScenario |EVERScenario |CIGScenario |EVERGrandparentVariable |EVERParentVariable |EVERVariable |CIGVariable |Period |MarketDate |Value
+# 2024 |BACA |HP_D5 |HP_D5 |MarketRisk Valiables | Market Risk Variables - U.S. Treasuries |UST 5Y | UST 5Y |quarterly |12/31/2063 | 0/015237
+
+# use dcast to reshape EST_Data from long format to wide format.  The rows will be now distinguished by the combination of
+# MarketDate and ESTScenario, and each column is created for each unique EVERVariable.  The values in the rehaped data table
+# come from the Value column in the original dataframe.
+EST_Data <- dcast(EST_Data, MarketDate + ESTScenario ~ EVERVariable, value.var = 'Value')
+# rename the columns of EST_Data to SettleDate, Scenario, BSBY1M, BSBY3M, R0C1, C1A2, SOFROIS3Y, SOFROIS5Y,
+# UST18M UST1M, UST1Y, UST2Y, UST3M, UST3Y, UST4Y, UST5Y, UST6M, UST9M
+names(EST_Data) <- c('SettleDate', 'Scenario', 'BSBY1M', 'BSBY3M', 'R0C1', 'C1A2', 'SOFROIS3Y', 'SOFROIS5Y', 'UST18M', 'UST1M', 'UST1Y', 'UST2Y', 'UST3M', 'UST3Y', 'UST4Y', 'UST5Y', 'UST6M', 'UST9M')
+
+# convert SettlleDate to %m/%d/%Y format
+EST_Data$SettleDate <- as.Date(EST_Data$SettleDate, '%m/%d/%Y')
+
+# read in QFAP_Data from macro/BSBY06_12M.csv
+QFAP_Data <- fread(paste0(dir, '/macro/BSBY06_12M.csv'))
+# mutate the MarketDate column to SettleDate, and BSBY06M and BSBY12M from percentage to decimal.
+# finally select only the SettleDate, BSBY06M, and BSBY12M columns
+QFAP_Data <- QFAP_Data %>% 
+    mutate(SettleDate = MarketDate
+           BSBY06M = BSBY06M/100, 
+           BSBY12M = BSBY12M/100) %>% 
+    select(SettleDate, BSBY06M, BSBY12M)
+
+# merge EST_Data with QFAP_Data by SettleDate with all.x = T
+EST_Data <- merge(EST_Data, QFAP_Data, by = 'SettleDate', all.x = T)
+# this added BSBY 6M and 12M to EST_Data. Note we already have R0C1 and C1A2, as well as BSBY1M and BSBY3M
+
