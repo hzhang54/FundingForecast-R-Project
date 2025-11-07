@@ -824,3 +824,126 @@ QFAP_Data <- QFAP_Data %>%
 EST_Data <- merge(EST_Data, QFAP_Data, by = 'SettleDate', all.x = T)
 # this added BSBY 6M and 12M to EST_Data. Note we already have R0C1 and C1A2, as well as BSBY1M and BSBY3M
 
+# Take EST_Data and filter out rows where settle date is prior to or equal to 2023-12-31, and Scenario is BACBL
+# or rows where settle date is after 2023-12-31.  These are historical data and prospective data, respectively.
+# create a new column C1A2SpreadToTreas by turning C1A2 from percentage into decimal, and
+# update Scenario column by assigned the value of HISTORICAL is settle date is <= 2023-12-31, and unchanged for other cases.
+# set BSBYUST1MSpread to the difference between BSBY1M and UST1M multiplied by 100 
+# set BSBYUST3MSpread to the difference between BSBY3M and UST3M multiplied by 100
+# set BSBYUST6MSpread to the difference between BSBY06M and UST6M multiplied by 10
+# use the average of BSBY6M and BSBY12M as proxy for BSBY09M and set BSBYUST9MSpread to the difference between this average and UST9M multiplied by 100
+# set BSBYUST12MSpread to the difference between BSBY12M and UST12M multiplied by 100
+# start a new mutate statement and create a column called prod_lt3mo and set its value to BSBYUST1MSpread - 2/1e4 for scenario in c(BACBL , SUPBL)
+# for cases where scenario is in c(BACA, SUPA, SUPEXP1), use the shift + 5/1e4 instead.
+# for all other cases, use the first +20/1e4
+# use the same shift sizes and create columns prod_3mo, prod_6mo, prod_9mo, and prod_1yr.  Use case_when to implement the scenario dependency.
+# save the results into EST_Data_ST
+EST_Data_ST <- EST_Data %>% 
+    filter((SettleDate <= '2023-12-31' & Scenario == 'BACBL') | 
+            (SettleDate > '2023-12-31')) %>% 
+    mutate(C1A2SpreadToTreas = C1A2/100,
+           Scenario = case_when(SettleDate <= '2023-12-31' ~ 'HISTORICAL',
+                                T ~ Scenario),
+           BSBYUST1MSpread = (BSBY1M - UST1M) * 100,
+           BSBYUST3MSpread = (BSBY3M - UST3M) * 100,
+           BSBYUST6MSpread = (BSBY06M - UST6M) * 100,
+           BSBYUST9MSpread = ((BSBY06M + BSBY12M)/2 - UST9M) * 100,
+           BSBYUST12MSpread = (BSBY12M - UST1Y) * 100) %>%
+     mutate(prod_lt3mo = case_when(Scenario %in% c('BACBL', 'SUPBL') ~ (BSBYUST1MSpread - 2/1e4),
+                                Scenario %in% c('BACA', 'SUPA', 'SUPEXP1') ~ (BSBYUST1MSpread + 5/1e4),
+                                T ~ (BSBYUST1MSpread + 20/1e4)),
+            prod_3mo = case_when(Scenario %in% c('BACBL', 'SUPBL') ~ (BSBYUST3MSpread - 2/1e4),
+                                Scenario %in% c('BACA', 'SUPA', 'SUPEXP1') ~ (BSBYUST3MSpread + 5/1e4),
+                                T ~ (BSBYUST3MSpread + 20/1e4)),
+            prod_6mo = case_when(Scenario %in% c('BACBL', 'SUPBL') ~ (BSBYUST6MSpread - 2/1e4),
+                                Scenario %in% c('BACA', 'SUPA', 'SUPEXP1') ~ (BSBYUST6MSpread + 5/1e4),
+                                T ~ (BSBYUST6MSpread + 20/1e4)),
+            prod_9mo = case_when(Scenario %in% c('BACBL', 'SUPBL') ~ (BSBYUST9MSpread - 2/1e4),
+                                Scenario %in% c('BACA', 'SUPA', 'SUPEXP1') ~ (BSBYUST9MSpread + 5/1e4),
+                                T ~ (BSBYUST9MSpread + 20/1e4)),
+            prod_1yr = case_when(Scenario %in% c('BACBL', 'SUPBL') ~ (BSBYUST12MSpread - 2/1e4),
+                                Scenario %in% c('BACA', 'SUPA', 'SUPEXP1') ~ (BSBYUST12MSpread + 5/1e4),
+                                T ~ (BSBYUST12MSpread + 20/1e4)))
+
+        
+# initialize data.1 and data.2 to list()
+data.1 <- data.2 <- list()
+counter <- 1
+
+# loop through each tenor
+for (tenor.i in c('<3mo', '3mo', '6mo', '9mo', '1yr')) {
+    # filter ST_Data_Mapping to only include rows where TenorBucket is tenor.i
+    # and stored the result to STdata.i.  This dataset has the C1A2 spread data.
+    STdata.i <- ST_Data_Mapping %>% filter(TenorBucket == tenor.i)
+    # take STdata.i and mutate to create SettleDateNew that cut the SettleDate by quarter and add quarters(1), which is 90 days and minut 1
+    # use dplyr::group_by to group by the SettleDateNew field
+    # and pipe to dplyr::summarize to calculate the quarterly average of SpreadtoTreasury
+    # pipe it to rename to rename SettleDateNew to SettleDate, and SpreadtoTreasury to SpreadtoTreasury_hist
+    # finally set the Scenario to 'HISTORICAL'
+    STdata.i <- STdata.i %>% 
+        mutate(SettleDateNew = as.Date(cut(SettleDate, "quarter")) + quarters(1) -1) %>% 
+        dplyr::group_by(SettleDateNew) %>% 
+        dplyr::summarize(SpreadtoTreasury = mean(SpreadtoTreasury)) %>% 
+        rename(SettleDate = SettleDateNew, SpreadtoTreasury_hist = SpreadtoTreasury) %>% 
+        mutate(Scenario = 'HISTORICAL')
+    # STdata.i has only three columns: SettleDate, SpreadtoTreasury_hist, and Scenario that is all Historical.
+    # SettleDate are like 3/31/2008, 6/30/2008, 9/30/2008 etc
+
+    # store EST_Data_ST in data.i
+    data.i <- EST_Data_ST
+    # merge data.i with STdata.i by SettleDate and Scenario with all.x = T
+    # this incorporate the data in STdata into this tenor data data.i
+    data.i <- merge(data.i, STdata.i, by = c('SettleDate', 'Scenario'), all.x = T)
+    # get the ratio from ratio_summary for this tenor.i.  It is a single row
+    ratio.i <- ratio_summary[TenorBucket == tenor.i]
+    # store the ratio.i$lb and ratio.i$ub in bucket.i
+    bucket.i <- c(ratio.i$lb, ratio.i$ub[nrow(ratio_summary)/5]) # [1] 0.0000 5.74646
+    # set the first element to 0 to make sure the lb is 0
+    bucket.i[1] <- 0
+    # cut data.i's C1A2SpreadtoTreas with bucket.i, and include lowest, set labels to bucket and paste in 1:buckets
+    data.i$bucket <- cut(data.i$C1A2SpreadtoTreas, bucket.i, include.lowest = TRUE, labels = paste0("bucket", 1:buckets))
+    # This creates a single bucket range for C1A2SpreadToTreas values.  The data will classify C1A2SpreadtoTreas value into this single bucket labeled bucket1.
+
+    # take data.i and left joint with ratio.i taking bucket and ratio_forecast columns
+    # further mutate SpreadtoTreasury_forecast as C1A2SpreadtoTreas * ratio_forecast * 100
+    # pipe to another mutate to set the SpreadtoTreasury_forecast to SpreadtoTreasury_hist * 100 for case when Scenario is HISTORICAL,
+    # and leave it as SpreadtoTreasury_forecast otherwise.
+    data.i <- data.i %>%  # we are merging data.i with ratio.i on the bucket column to bring in ratio_forecast.  The left_join ensures all rows from data.i are kept, and matching rows from ratio.i are brought in.  This way, we are enhancing data.i with additional data from ratio.i
+        left_join(ratio.i[, list(bucket, ratio_forecast)], # ratio_i has bucket, ratio_forecast, TenorBucket, lb,ub, with values: bucket1, 0.468, 1yr, 0, 5.74646
+                  by = 'bucket') %>%  # the bucket column of data.i is bucket1 unless when C1A2SpreadtoTreas is NA.  In which case it is NA
+        mutate(SpreadtoTreasury_forecast = C1A2SpreadtoTreas * ratio_forecast * 100) %>% 
+        mutate(SpreadtoTreasury_forecast = case_when(Scenario == 'HISTORICAL' ~ SpreadtoTreasury_hist * 100,
+                                                      T ~ SpreadtoTreasury_forecast))   
+    
+    # pipe data.i to a filter that filters SettleDate between 2007-01-01 and 2026-12-31,
+    # further pipe to a filter that filter Scenario in HISTORICAL, BACBL, BACA, BACSA, SUPBL, SUPSA
+    # then pipe to mutate the Scenario to factor with levels in this order, with labels in the same Scenario names
+    # save the result in data.i1
+    data.i1 <- data.i %>% 
+        filter(SettleDate %between% as.Date(c('2007-01-01', '2026-12-31'))) %>% 
+        filter(Scenario %in% c('HISTORICAL', 'BACBL', 'BACA', 'BACSA', 'SUPBL', 'SUPSA')) %>% 
+        mutate(Scenario = factor(Scenario, levels = c('HISTORICAL', 'BACBL', 'BACA', 'BACSA', 'SUPBL', 'SUPSA'), labels = c('HISTORICAL', 'BACBL', 'BACA', 'BACSA', 'SUPBL', 'SUPSA')))
+    # use mutate() to transform the Scenario column into a factor (categorical variable) with specified levels and labels in the given order
+
+    # pipe data.i to create a column SpreadtoTreasury_forecast_prod by taking the value of the column SpreadtoTreasury_hist in the case when
+    # the scenario name is HISTORICAL, and in the case when tenor.i is <3mo, it's value is prod_lt3mo,
+    # in the case when tenor.i is 3mo, it's value is prod_3mo, etc
+    # further pipe to a filter to filter SettleDate between 2008-01-01 and 2026-12-31 in a way similar to the previous statement
+    # then filter Scenario to HISTORICAL, BACBL, BACA, BACSA and create a factor similar to the previous statement
+    # save the result in data.i2
+    data.i2 <- data.i %>% 
+        mutate(SpreadtoTreasury_forecast_prod = case_when(Scenario == 'HISTORICAL' ~ SpreadtoTreasury_hist,
+                                                          tenor.i == '<3mo' ~ prod_lt3mo,
+                                                          tenor.i == '3mo' ~ prod_3mo,
+                                                          tenor.i == '6mo' ~ prod_6mo,
+                                                          tenor.i == '9mo' ~ prod_9mo,
+                                                          tenor.i == '1yr' ~ prod_1yr) * 100) %>% 
+        filter(SettleDate %between% as.Date(c('2008-01-01', '2026-12-31'))) %>% 
+        filter(Scenario %in% c('HISTORICAL', 'BACBL', 'BACA', 'BACSA')) %>% 
+        mutate(Scenario = factor(Scenario, levels = c('HISTORICAL', 'BACBL', 'BACA', 'BACSA'), labels = c('HISTORICAL', 'BACBL', 'BACA', 'BACSA')))
+    # accumulate the data rows into data.1 and data.2 and increment the counter.  data.1 has the new forecast, and data.2 has the prod forecast
+    data.1[[counter]] <- data.i1
+    data.2[[counter]] <- data.i2
+    counter <- counter + 1
+}
+
